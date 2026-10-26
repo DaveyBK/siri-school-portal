@@ -542,6 +542,12 @@ class MainWindow(tk.Tk):
         self.att_scan_entry = None      # the page's scan box (N3): the first focusable widget of the page
         self.att_bar_note = None        # the marks bar's note (N3)
         self._att_cancel_btn = None     # Cancel a lesson, in the band (N3)
+        self._att_cancel_code = None    # under it: the code of the weekly class it acts on
+        self._att_scan_line = None      # what the last scan did by itself: the name, big, and Undo
+        self._att_scan_label = None
+        self._att_scan_undo_btn = None
+        self._att_scan_pending = None   # (student ID, date, name) the last scan marked, while Undo is offered
+        self._att_scan_after_id = None
 
         # A running C-Test, so its end can refresh the panel (B4-2): the process, its student, one poll job
         self._ctest_proc = None
@@ -4058,7 +4064,8 @@ class MainWindow(tk.Tk):
                  anchor='w').pack(side=tk.TOP, anchor='w', pady=(0, S(12)))
         self._att_band_right = tk.Frame(band, bg=COLORS['primary'])
         self._att_band_right.pack(side=tk.RIGHT, padx=(0, S(20)))
-        # The scan box: a card scanned here opens Manual Entry with the card in its ID box (design 2.9)
+        # The scan box: a card of the open lesson's student is marked present at once; any other card opens Manual
+        # Entry with the card in its ID box (design 2.9)
         tk.Label(self._att_band_right, text="Scan student card", bg=COLORS['primary'], fg='white',
                  font=F(9, bold=True)).pack(side=tk.LEFT, padx=(0, S(6)))
         self.att_scan_var = tk.StringVar()
@@ -4066,11 +4073,16 @@ class MainWindow(tk.Tk):
         self.att_scan_entry.pack(side=tk.LEFT)
         self.att_scan_entry.bind("<Return>", self.on_attendance_scan_enter)
         # Opens the Roster's own Cancel Class dialog for the class the list shows: light grey (design 2.10)
-        self._att_cancel_btn = theme.flat_button(self._att_band_right, 'secondary', text="Cancel a lesson",
+        cancel_col = tk.Frame(self._att_band_right, bg=COLORS['primary'])
+        cancel_col.pack(side=tk.LEFT, padx=(S(12), 0))
+        self._att_cancel_btn = theme.flat_button(cancel_col, 'secondary', text="Cancel a lesson",
                 bg='#95a5a6', fg='white', font=F(9, bold=True), padx=S(12), pady=S(5), state=tk.DISABLED,
                 disabledforeground=theme.colour('secondary_disabled', '#bdc3c7'),
                 command=self.on_attendance_cancel_lesson)
-        self._att_cancel_btn.pack(side=tk.LEFT, padx=(S(12), 0))
+        self._att_cancel_btn.pack(side=tk.TOP)
+        # Which class the button acts on: the open weekly class's code, blank otherwise (the button's text unchanged)
+        self._att_cancel_code = tk.Label(cancel_col, text="", bg=COLORS['primary'], fg='white', font=F(8))
+        self._att_cancel_code.pack(side=tk.TOP)
 
         # ===== ROW A: the date =====
         row_a = tk.Frame(main_container, bg=ground, padx=S(20))
@@ -4182,6 +4194,16 @@ class MainWindow(tk.Tk):
         self.att_mark_line = tk.Label(content, text="", bg=card_bg, fg=COLORS['primary'],
                 font=F(10, bold=True), anchor='w')
         self.att_mark_line.pack(side=tk.TOP, fill=tk.X)
+
+        # What the last scan did by itself (a card of the open lesson): the name, big, and Undo for a short time.
+        # Packed under the line above by the first such scan (_att_scan_show)
+        self._att_scan_line = tk.Frame(content, bg=card_bg)
+        self._att_scan_label = tk.Label(self._att_scan_line, text="", bg=card_bg, fg=COLORS['success'],
+                font=F(14, bold=True), anchor='w')
+        self._att_scan_label.pack(side=tk.LEFT)
+        self._att_scan_undo_btn = theme.flat_button(self._att_scan_line, 'secondary', text="Undo",
+                bg=COLORS['secondary'], fg='white', font=F(9, bold=True), padx=S(12), pady=S(3), takefocus=0,
+                command=self.on_att_scan_undo)
 
         # The marks bar, packed before the list so the list can never push it out (the B5b-14 rule)
         self.att_bar = tk.Frame(content, bg=card_bg)
@@ -4686,6 +4708,9 @@ class MainWindow(tk.Tk):
                 pass
         btn.config(text="Cancellations\u2026" if upcoming else "Cancel a lesson",
                    state=tk.NORMAL if weekly else tk.DISABLED)
+        code = getattr(self, "_att_cancel_code", None)
+        if code is not None and code.winfo_exists():
+            code.config(text=str(cid) if weekly else "")
 
     def on_attendance_cancel_lesson(self):
         """Cancel a lesson (N3): the Roster's own dialog for the class the list shows; when it closes, the strip and
@@ -4942,13 +4967,99 @@ class MainWindow(tk.Tk):
         self._update_att_status()
 
     def on_attendance_scan_enter(self, event=None):
-        """A card scanned into the Attendance page's scan box (N3). The box is only a door to Manual Entry: the
-        text goes into Manual Entry's ID box, which looks the card up as it does today (5c); only its Save saves."""
+        """A card scanned into the Attendance page's scan box (N3). With a lesson open (its card selected) on today's
+        date and not cancelled, a card of a student in that lesson with no mark yet is marked present at once, and
+        one already present is only said. Any other card is the door to Manual Entry as before: the text goes into
+        Manual Entry's ID box, which looks the card up as it does today (5c); only its Save saves."""
         text = (self.att_scan_var.get() or "").strip()
         self.att_scan_var.set("")                       # the box is always empty afterwards
-        if text:
+        if text and not self._att_scan_mark(text):
             self.on_attendance_manual_entry(prefill=text)
         return "break"
+
+    def _att_scan_mark(self, text):
+        """A scan's direct path. True if it was dealt with here (marked present, or present already); False sends it
+        to Manual Entry: no lesson open, a Date box that is not today (local date), a cancelled lesson, a card that
+        is not a student of the lesson, or a mark other than present (absent, late) the desk may want to change."""
+        cid = self._att_view[1] if self._att_view[0] == "class" else None
+        today = date.today()
+        iso = today.isoformat()
+        if not cid or (self.att_date_var.get() or "").strip() != iso:
+            return False
+        try:
+            if not str(cid).startswith("extra:") and models.is_class_cancelled(cid, today):
+                return False
+            sid = _card_student_id(text)
+            st = next((s for s in models.get_roster_with_attendance(cid, iso) if str(s['student_id']) == sid), None)
+        except Exception:
+            return False                                # Manual Entry, as before, says what it can
+        if st is None:
+            return False
+        status = (st.get('status') or '').lower()
+        name = models.display_name(st)
+        if status == 'present':
+            self._att_scan_show(f"{name} — already marked present. Nothing changed.", COLORS['primary'])
+            return True
+        if status:
+            return False
+        try:
+            models.set_attendance_status(sid, iso, "present")              # the write Manual Entry's Save makes
+        except Exception as e:
+            messagebox.showerror("Could not mark", f"{sid}: {e}\n\nNothing was marked.")
+            return True
+        self._att_redraw_after_write([sid], [sid], [(sid, "present")], iso)
+        card = next((c for c in self._att_cards if c["class_id"] == cid), None)
+        where = card["name"] if str(cid).startswith("extra:") and card else str(cid)
+        self._att_scan_show(f"✓ {name} — present · {where}", COLORS['success'], undo=(sid, iso, name))
+        return True
+
+    def _att_scan_show(self, text, colour, undo=None):
+        """Say what the scan did in the scan line; undo=(student ID, date, name) also offers Undo for 10 seconds.
+        Any earlier Undo ends here: only the last scan can be undone."""
+        self._att_scan_end_undo()
+        line, label = self._att_scan_line, self._att_scan_label
+        if line is None or not line.winfo_exists():
+            return
+        label.config(text=text, fg=colour)
+        if not line.winfo_manager():
+            line.pack(side=tk.TOP, fill=tk.X, after=self.att_mark_line)
+        if undo:
+            self._att_scan_pending = undo
+            self._att_scan_undo_btn.pack(side=tk.LEFT, padx=(theme.scale(12), 0))
+            self._att_scan_after_id = self.after(10000, self._att_scan_end_undo)
+
+    def _att_scan_end_undo(self):
+        """Undo is no longer offered: its timer stopped, its button hidden, nothing remembered."""
+        if self._att_scan_after_id is not None:
+            try:
+                self.after_cancel(self._att_scan_after_id)
+            except Exception:
+                pass
+            self._att_scan_after_id = None
+        self._att_scan_pending = None
+        btn = self._att_scan_undo_btn
+        if btn is not None and btn.winfo_exists():
+            btn.pack_forget()
+
+    def on_att_scan_undo(self):
+        """Undo the last scan's mark: delete the row it made (clear_attendance, which logs CLEAR_MARK as Clear mark
+        does), but only if it is still present with no note; a mark changed since is left alone."""
+        pending = self._att_scan_pending
+        self._att_scan_end_undo()
+        if not pending:
+            return
+        sid, iso, name = pending
+        try:
+            mark = models.get_marks_for_date(iso).get(sid)
+            if not mark or mark["status"] != "present" or (mark["notes"] or "").strip():
+                self._att_scan_label.config(text=f"Not undone: {name}'s mark was changed", fg=COLORS['danger'])
+                return
+            models.clear_attendance(sid, iso)
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not undo the mark:\n{e}")
+            return
+        self._att_redraw_after_write([sid], [sid], [(sid, None)], iso)
+        self._att_scan_label.config(text=f"↩ Undone: {name} not marked", fg=COLORS['primary'])
 
     def on_attendance_manual_entry(self, prefill=None):
         """Manual student entry for attendance (in case QR reader fails)"""
