@@ -574,6 +574,8 @@ class MainWindow(tk.Tk):
         self.load_attendance()  # today's attendance view
         self.load_admin_logs()  # Load admin logs on startup
         self.notebook.select(3)  # the portal opens on Attendance, the top row of the side menu (N2, D4)
+        # ...with the cursor in its scan box, as after a click on its menu row; once the page is drawn
+        self.after_idle(self._focus_page_after_menu_click, 3)
         
         # Initialize tutorial system
         self.tutorial_manager = SimpleTutorialManager(self)
@@ -4727,15 +4729,18 @@ class MainWindow(tk.Tk):
 
     def on_attendance_card_click(self, class_id):
         """A card is the dropdown entry of its class: the same lookup, the same method. The selected card clicked
-        again is "All Classes"."""
+        again is "All Classes" as the day view: the Date-box day's students, as Load schedule shows them. Either
+        way the cursor goes back to the scan box, ready for the next card."""
         if self._att_view == ("class", class_id):
             self.att_class_filter_var.set("All Classes")
+            self.on_load_schedule_attendance(quiet=True)
         else:
             display = next((d for d, c in self._att_class_id_lookup.items() if c == class_id), None)
             if display is None:
                 return
             self.att_class_filter_var.set(display)
-        self.on_attendance_filter_by_class()
+            self.on_attendance_filter_by_class()
+        self._focus_page_after_menu_click(3)
 
     def _att_update_class_header(self):
         """The line at the top of the list card: which class, or which view, and for which date."""
@@ -5206,6 +5211,17 @@ class MainWindow(tk.Tk):
             save_btn.focus_set()
             return "break"
         student_id_entry.bind("<Return>", on_student_id_enter)
+
+        # When it closes, however it was opened, the cursor goes back to the Attendance page's scan box
+        def on_manual_closed(event):
+            if event.widget is not manual_window:
+                return                                  # a child of the window going with it
+            try:
+                if self.notebook.index("current") == 3:
+                    self._focus_page_after_menu_click(3)
+            except tk.TclError:
+                pass                                    # the portal itself is closing
+        manual_window.bind("<Destroy>", on_manual_closed)
 
         # Sized by its content, at least the old 500 px wide: it cannot be made smaller than that, so Notes and Save
         # always show, whatever the display scaling (B5a-13)
