@@ -1,0 +1,34 @@
+{
+  "scanner_type": "hid_keyboard_wedge",
+  "enabled": true,
+  "auto_process": true,
+  "scan_mode": {
+    "enabled": false,
+    "title": "Hardware Scanner Active",
+    "instructions": "Point scanner at QR code and press trigger"
+  },
+  "input_settings": {
+    "terminator": "Return",
+    "prefix_filter": "",
+    "suffix_filter": "♪\t\r\n",
+    "min_length": 5,
+    "max_length": 100,
+    "debounce_ms": 100,
+    "min_scan_duration_ms": 50
+  },
+  "validation": {
+    "require_prefix": true,
+    "valid_prefixes": ["I:", "S:"],
+    "reject_invalid": true
+  },
+  "audio_feedback": {
+    "enabled": true,
+    "success_beep": true,
+    "error_beep": true
+  },
+  "logging": {
+    "enabled": true,
+    "log_all_scans": true,
+    "log_errors": true
+  }
+}

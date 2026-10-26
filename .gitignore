@@ -1,0 +1,125 @@
+# School Portal (Pear v2): never commit real data (PDPA)
+
+# ===== Databases =====
+*.db
+*.db.*
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*-wal
+*-shm
+*-journal
+
+# ===== Data / runtime folders =====
+data/*
+!data/__init__.py
+!data/roster_bridge.py
+backups/
+exports/
+imports/
+logs/
+debug/
+student_photos/
+data.backup/
+data..json_imports/
+Antyh downlink/
+
+# ===== Credentials, secrets, local settings =====
+credentials.json
+*credentials*.json
+.env
+.env.*
+*.pem
+*.key
+*.p12
+.claude/settings.local.json
+
+# ===== Student-data file types anywhere =====
+*.csv
+*.tsv
+*.xls
+*.xlsx
+*.json
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.webp
+*.heic
+*.pdf
+*.zip
+*.tar
+*.gz
+*.tgz
+*.7z
+*.rar
+*.log
+*.reg
+*.lnk
+
+# ===== Backups, temp, scratch =====
+*.bak
+*.bak-*
+*.bak[0-9]*
+*.orig
+*.tmp
+*.temp
+Launch_Pear_Advanced
+missing_methods.txt
+
+# ===== Build =====
+build/
+dist/
+*.exe
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+docs/_build/
+
+# ===== IDEs / editors =====
+.vscode/
+*.code-workspace
+.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# ===== OS =====
+desktop.ini
+.DS_Store
+.AppleDouble
+.LSOverride
+.directory
+
+# ===== Reviewed whitelist (keep LAST) =====
+!hardware/qr_scanner/scanner_config.json
+# !data/credentials.example.json     # after confirming username is a generic default
+# !student_template.csv              # after checking the 2 rows' phone column
+# !schedule_format_example.csv       # after checking the 32 free-text cells

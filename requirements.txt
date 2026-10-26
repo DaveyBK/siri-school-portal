@@ -1,0 +1,13 @@
+# Core Dependencies for School Inventory Management System (Pear v2)
+
+# Image processing for student photos
+Pillow>=10.0.0
+
+# QR code generation for items and students
+qrcode[pil]>=7.4.2
+
+# Password hashing for secure credential storage
+bcrypt>=4.0.0
+
+# Note: tkinter comes bundled with Python
+# If tkinter is missing on Linux, install: sudo apt-get install python3-tk
